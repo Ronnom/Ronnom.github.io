@@ -1,0 +1,9 @@
+# inventory_system/uploads/.htaccess
+
+# Prevent PHP execution in this folder
+<Files *.php>
+    deny from all
+</Files>
+
+# Disable directory browsing (so people can't list all your files)
+Options -Indexes
