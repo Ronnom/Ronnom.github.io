@@ -1,0 +1,376 @@
+<?php 
+session_start();
+define('ACCESS_ALLOWED', true); 
+?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PC Project - POS</title>
+    <link rel="icon" type="image/png" href="../assets/img/logopc.png">
+    <link href="../fontawesome/css/all.min.css" rel="stylesheet">
+    <script src="../assets/js/main.js?v=2"></script>
+    <link rel="stylesheet" href="../assets/css/style.css?v=<?php echo time(); ?>">
+    <style>
+        /* POS SPECIFIC STYLES */
+        body { overflow: hidden; } /* Prevent double scrollbars */
+        .pos-container { display: flex; height: calc(100vh - 80px); gap: 20px; padding-bottom: 20px; }
+        
+        /* LEFT: PRODUCT GRID */
+        .pos-left { flex: 2; display: flex; flex-direction: column; gap: 15px; }
+        .product-grid { 
+            display: grid; 
+            grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); 
+            gap: 15px; 
+            overflow-y: auto; 
+            padding-right: 5px; 
+            flex: 1;
+        }
+        .pos-card { 
+            background: white; border: 1px solid #eee; border-radius: 12px; cursor: pointer; 
+            transition: 0.2s; overflow: hidden; position: relative; 
+        }
+        .pos-card:hover { transform: translateY(-3px); border-color: #476eef; box-shadow: 0 5px 15px rgba(0,0,0,0.05); }
+        .pos-card:active { transform: scale(0.98); }
+        .pos-img { height: 100px; width: 100%; object-fit: cover; background: #f9f9f9; }
+        .pos-details { padding: 10px; }
+        .pos-name { font-size: 13px; font-weight: 700; color: #2b3674; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .pos-price { color: #476eef; font-weight: 800; font-size: 14px; margin-top: 4px; }
+        .pos-stock { font-size: 11px; color: #a3aed0; margin-top: 2px; }
+        .out-stock { opacity: 0.6; pointer-events: none; filter: grayscale(1); }
+
+        /* RIGHT: CART */
+        .pos-right { 
+            flex: 1; background: white; border-radius: 16px; 
+            display: flex; flex-direction: column; 
+            box-shadow: 0 5px 20px rgba(0,0,0,0.05); overflow: hidden; 
+        }
+        .cart-header { padding: 20px; border-bottom: 1px solid #f4f7fe; font-weight: 700; font-size: 18px; color: #2b3674; display:flex; justify-content:space-between; align-items:center; }
+        .cart-items { flex: 1; overflow-y: auto; padding: 0; }
+        .cart-item { display: flex; justify-content: space-between; align-items: center; padding: 15px 20px; border-bottom: 1px solid #f9f9f9; }
+        .cart-item-info { flex: 1; }
+        .cart-name { font-weight: 700; font-size: 14px; color: #2b3674; }
+        .cart-price { font-size: 12px; color: #a3aed0; }
+        .cart-controls { display: flex; align-items: center; gap: 10px; }
+        .qty-btn { width: 24px; height: 24px; border-radius: 6px; border: 1px solid #eee; background: white; cursor: pointer; display: flex; align-items: center; justify-content: center; color: #2b3674; }
+        .qty-btn:hover { background: #f4f7fe; color: #476eef; border-color: #476eef; }
+        
+        .cart-footer { padding: 20px; background: #f8f9fc; border-top: 1px solid #eee; }
+        .summary-row { display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 14px; color: #707eae; }
+        .total-row { display: flex; justify-content: space-between; font-size: 20px; font-weight: 800; color: #2b3674; margin-top: 15px; margin-bottom: 20px; }
+        .btn-checkout { width: 100%; padding: 15px; border-radius: 12px; font-size: 16px; font-weight: 700; background: #476eef; color: white; border: none; cursor: pointer; transition: 0.2s; }
+        .btn-checkout:hover { background: #3b5bdb; }
+        .btn-checkout:disabled { background: #a3aed0; cursor: not-allowed; }
+
+        /* CHECKOUT MODAL */
+        .pay-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin: 20px 0; }
+        .pay-box { padding: 15px; border: 1px solid #eee; border-radius: 10px; text-align: center; }
+        .pay-label { font-size: 12px; color: #a3aed0; margin-bottom: 5px; }
+        .pay-value { font-size: 18px; font-weight: 800; color: #2b3674; }
+        .change-value { color: #05cd99; }
+    </style>
+</head>
+<body>
+
+<?php include '../includes/sidebar.php'; ?>
+
+    <main class="main-content">
+        <header style="margin-bottom: 15px;">
+            <div><h2>Point of Sale</h2></div>
+            <div class="search-wrapper" style="width: 400px;">
+                <i class="fa-solid fa-barcode"></i>
+                <input type="text" id="posSearch" placeholder="Scan Barcode or Search Product..." autocomplete="off">
+            </div>
+        </header>
+
+        <div class="pos-container">
+            <div class="pos-left">
+                <div style="display:flex; gap:10px; overflow-x:auto; padding-bottom:5px;">
+                    <button class="btn-filter active" onclick="filterCat('All', this)">All</button>
+                    <button class="btn-filter" onclick="filterCat('Processor', this)">CPU</button>
+                    <button class="btn-filter" onclick="filterCat('Graphics Card', this)">GPU</button>
+                    <button class="btn-filter" onclick="filterCat('Motherboard', this)">Mobo</button>
+                    <button class="btn-filter" onclick="filterCat('Memory', this)">RAM</button>
+                    <button class="btn-filter" onclick="filterCat('Storage', this)">Storage</button>
+                    <button class="btn-filter" onclick="filterCat('Peripherals', this)">Access.</button>
+                </div>
+                <div class="product-grid" id="productGrid">
+                    </div>
+            </div>
+
+            <div class="pos-right">
+                <div class="cart-header">
+                    <span>Current Cart</span>
+                    <span class="btn-sm-remove" onclick="clearCart()" title="Clear Cart"><i class="fa-solid fa-trash"></i></span>
+                </div>
+                <div class="cart-items" id="cartItems">
+                    <div style="text-align:center; padding:40px; color:#a3aed0;">
+                        <i class="fa-solid fa-basket-shopping" style="font-size:30px; margin-bottom:10px;"></i><br>Cart is empty
+                    </div>
+                </div>
+                <div class="cart-footer">
+                    <div class="summary-row"><span>Items</span><span id="summCount">0</span></div>
+                    <div class="total-row"><span>Total</span><span id="summTotal">₱0.00</span></div>
+                    <button class="btn-checkout" id="btnPay" onclick="openCheckout()" disabled>Proceed to Payment</button>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <div id="checkoutModal" class="modal">
+        <div class="modal-content" style="max-width: 400px;">
+            <div class="modal-header"><h2>Payment</h2><i class="fa-solid fa-xmark close-btn" onclick="closeCheckout()"></i></div>
+            
+            <div class="pay-grid">
+                <div class="pay-box">
+                    <div class="pay-label">Total Amount</div>
+                    <div class="pay-value" id="payTotal">₱0.00</div>
+                </div>
+                <div class="pay-box">
+                    <div class="pay-label">Change</div>
+                    <div class="pay-value change-value" id="payChange">₱0.00</div>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>Cash Received (₱)</label>
+                <input type="number" id="cashInput" style="font-size: 24px; font-weight: 700; text-align: center; color: #476eef;" oninput="calculateChange()">
+            </div>
+
+            <div class="modal-footer">
+                <button class="btn-cancel" onclick="closeCheckout()">Back</button>
+                <button class="btn-save" id="btnConfirmPay" onclick="processPayment()" style="width:100%;" disabled>Confirm & Print</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // CONFIG
+        const INV_API = "../api/api.php?limit=-1"; // Get all items
+        const POS_API = "../api/pos_api.php";
+        const IMG_PATH = "../assets/uploads/";
+
+        let inventory = [];
+        let cart = [];
+        let currentCat = 'All';
+
+        // --- INIT ---
+        document.addEventListener("DOMContentLoaded", () => {
+            fetchInventory();
+            document.getElementById("posSearch").focus();
+        });
+
+        // Keep focus on search when clicking background
+        document.body.addEventListener('click', (e) => {
+            if(e.target.tagName !== 'INPUT' && e.target.tagName !== 'BUTTON') {
+                document.getElementById("posSearch").focus();
+            }
+        });
+
+        async function fetchInventory() {
+            try {
+                const res = await fetch(INV_API, { credentials: 'include' });
+                const data = await res.json();
+                inventory = Array.isArray(data) ? data : data.inventory; // Handle different API responses
+                renderGrid();
+            } catch(e) { console.error(e); }
+        }
+
+        // --- RENDER GRID ---
+        function renderGrid() {
+            const grid = document.getElementById("productGrid");
+            const search = document.getElementById("posSearch").value.toLowerCase();
+            grid.innerHTML = "";
+
+            inventory.forEach(item => {
+                // Filters: Category + Search + Not Archived
+                if(item.is_archived == 1) return;
+                if(currentCat !== 'All' && item.category !== currentCat) return;
+                if(search && !item.name.toLowerCase().includes(search) && !item.sku.toLowerCase().includes(search)) return;
+
+                const img = item.image ? IMG_PATH + item.image : IMG_PATH + 'default.png';
+                const stockClass = item.stock <= 0 ? 'out-stock' : '';
+                
+                grid.innerHTML += `
+                    <div class="pos-card ${stockClass}" onclick="addToCart(${item.id})">
+                        <img src="${img}" class="pos-img">
+                        <div class="pos-details">
+                            <div class="pos-name" title="${item.name}">${item.name}</div>
+                            <div class="pos-stock">${item.stock} in stock</div>
+                            <div class="pos-price">₱${Number(item.price).toLocaleString()}</div>
+                        </div>
+                    </div>
+                `;
+            });
+        }
+
+        document.getElementById("posSearch").addEventListener("input", (e) => {
+            // If scanning (enter key usually sends newline), check exact SKU match
+            const val = e.target.value;
+            const exactItem = inventory.find(i => i.sku === val && i.stock > 0);
+            
+            if(exactItem) {
+                addToCart(exactItem.id);
+                e.target.value = ""; // Clear scan
+            } else {
+                renderGrid(); // Normal search
+            }
+        });
+
+        function filterCat(cat, btn) {
+            currentCat = cat;
+            document.querySelectorAll('.btn-filter').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            renderGrid();
+        }
+
+        // --- CART LOGIC ---
+        function addToCart(id) {
+            const item = inventory.find(i => i.id === id);
+            if(!item || item.stock <= 0) return;
+
+            const existing = cart.find(c => c.id === id);
+            
+            if(existing) {
+                if(existing.qty < item.stock) existing.qty++;
+                else alert("Max stock reached!");
+            } else {
+                cart.push({ id: item.id, name: item.name, price: item.price, qty: 1, max: item.stock });
+            }
+            renderCart();
+        }
+
+        function renderCart() {
+            const container = document.getElementById("cartItems");
+            container.innerHTML = "";
+            let total = 0;
+            let count = 0;
+
+            if(cart.length === 0) {
+                container.innerHTML = '<div style="text-align:center; padding:40px; color:#a3aed0;"><i class="fa-solid fa-basket-shopping" style="font-size:30px; margin-bottom:10px;"></i><br>Cart is empty</div>';
+                document.getElementById("btnPay").disabled = true;
+            } else {
+                cart.forEach((item, index) => {
+                    total += item.price * item.qty;
+                    count += item.qty;
+                    container.innerHTML += `
+                        <div class="cart-item">
+                            <div class="cart-item-info">
+                                <div class="cart-name">${item.name}</div>
+                                <div class="cart-price">₱${Number(item.price).toLocaleString()} x ${item.qty}</div>
+                            </div>
+                            <div class="cart-controls">
+                                <div class="qty-btn" onclick="updateQty(${index}, -1)"><i class="fa-solid fa-minus"></i></div>
+                                <span style="font-weight:700; width:20px; text-align:center;">${item.qty}</span>
+                                <div class="qty-btn" onclick="updateQty(${index}, 1)"><i class="fa-solid fa-plus"></i></div>
+                            </div>
+                        </div>
+                    `;
+                });
+                document.getElementById("btnPay").disabled = false;
+            }
+
+            document.getElementById("summCount").innerText = count;
+            document.getElementById("summTotal").innerText = "₱" + total.toLocaleString();
+        }
+
+        function updateQty(index, change) {
+            const item = cart[index];
+            if(change === 1 && item.qty < item.max) item.qty++;
+            if(change === -1) item.qty--;
+            
+            if(item.qty === 0) cart.splice(index, 1);
+            renderCart();
+        }
+
+        function clearCart() {
+            if(confirm("Clear cart?")) { cart = []; renderCart(); }
+        }
+
+        // --- CHECKOUT ---
+        let grandTotal = 0;
+
+        function openCheckout() {
+            grandTotal = cart.reduce((sum, i) => sum + (i.price * i.qty), 0);
+            document.getElementById("payTotal").innerText = "₱" + grandTotal.toLocaleString();
+            document.getElementById("payChange").innerText = "₱0.00";
+            document.getElementById("cashInput").value = "";
+            document.getElementById("checkoutModal").style.display = "block";
+            document.getElementById("cashInput").focus();
+        }
+
+        function closeCheckout() {
+            document.getElementById("checkoutModal").style.display = "none";
+        }
+
+        function calculateChange() {
+            const cash = parseFloat(document.getElementById("cashInput").value) || 0;
+            const change = cash - grandTotal;
+            document.getElementById("payChange").innerText = change >= 0 ? "₱" + change.toLocaleString() : "₱0.00";
+            document.getElementById("btnConfirmPay").disabled = cash < grandTotal;
+        }
+
+        async function processPayment() {
+            const btn = document.getElementById("btnConfirmPay");
+            btn.innerText = "Processing...";
+            btn.disabled = true;
+
+            try {
+                const res = await fetch(POS_API, {
+                    method: "POST",
+                    headers: { 
+                        "Content-Type": "application/json",
+                        'X-CSRF-Token': sessionStorage.getItem('csrfToken')
+                    },
+                    credentials: 'include',
+                    body: JSON.stringify({ items: cart })
+                });
+                
+                const data = await res.json();
+                
+                if(data.error) {
+                    alert(data.error);
+                } else {
+                    // Success
+                    const txnId = data.txn_id;
+                    printReceipt(txnId, document.getElementById("cashInput").value);
+                    cart = [];
+                    renderCart();
+                    fetchInventory(); // Refresh stock
+                    closeCheckout();
+                }
+            } catch(e) {
+                alert("Transaction failed. Check console.");
+                console.error(e);
+            }
+            btn.innerText = "Confirm & Print";
+            btn.disabled = false;
+        }
+
+        function printReceipt(txnId, cash) {
+            const change = (cash - grandTotal).toFixed(2);
+            let itemsHtml = "";
+            cart.forEach(i => {
+                itemsHtml += `<tr><td>${i.name}</td><td align="right">${i.qty}</td><td align="right">${(i.price*i.qty).toLocaleString()}</td></tr>`;
+            });
+
+            const w = window.open('', '', 'width=300,height=600');
+            w.document.write(`
+                <html><body style="font-family:monospace; padding:10px; font-size:12px;">
+                    <center><h3>PC PROJECT</h3><p>Official Receipt<br>${new Date().toLocaleString()}<br>Ref: ${txnId}</p></center>
+                    <table width="100%" border="0">${itemsHtml}</table>
+                    <hr>
+                    <div style="text-align:right">
+                        <b>TOTAL: ₱${grandTotal.toLocaleString()}</b><br>
+                        Cash: ₱${parseFloat(cash).toLocaleString()}<br>
+                        Change: ₱${parseFloat(change).toLocaleString()}
+                    </div>
+                    <br><center>Thank you!</center>
+                    <script>window.print();window.close();<\/script>
+                </body></html>
+            `);
+        }
+    </script>
+</body>
+</html>
